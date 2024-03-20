@@ -30,10 +30,16 @@
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
-static void __do_fork (void *);
+
 void argument_stack(char** argv, int argc, struct intr_frame *if_);
 struct thread *get_thread_from_tid(tid_t thread_id);
 
+struct parent_info
+{
+	struct thread *parent;
+	struct intr_frame *parent_f;
+};
+static void __do_fork (struct parent_info *aux);
 // //구현
 // static char parse_options (char **argv);
 
@@ -57,6 +63,40 @@ process_init (void) {
  * 스레드 ID 또는 스레드를 만들 수 없는 경우 TID_ERROR.
  * 한 번 호출해야 합니다
  * */
+
+void argument_stack (char **argv, int argc, struct intr_frame *if_){
+	
+	int minus_addr;
+	int address = if_->rsp;
+	for (int i = argc-1; i >= 0;i-- ){
+		minus_addr = strlen(argv[i]) + 1; //if onearg, value = 7 
+		address -= minus_addr;
+		memcpy(address, argv[i], minus_addr);
+		argv[i] = (char *)address;
+	}
+
+	if (address % 8){
+		int word_align = address % 8;
+		address -= word_align;
+		memset(address, 0, word_align);
+	}
+
+	address -= 8;
+	memset(address, 0, sizeof(char*));
+
+	// address -= 8*argc;
+	// memcpy(address, &argv, 8*argc);
+
+	address -= (sizeof(char*) * argc);
+	memcpy(address, argv, sizeof(char*) * argc);
+
+
+	address -= 8;
+	memset(address, 0, 8);
+	if_->rsp = address;
+}
+
+
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
@@ -104,14 +144,17 @@ initd (void *f_name) {
  * 스레드를 만들 수 없는 경우 TID_ERROR입니다.
  */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+process_fork (const char *name, struct intr_frame *if_) {
 	/* Clone current thread to new thread.*/
-	// thread_current()->tf = if_;
-	struct thread *cur = thread_current();
-	memcpy(&cur->parent_tf, if_, sizeof(struct intr_frame));
+	struct parent_info my_data;
+	my_data.parent = thread_current();
+	my_data.parent_f = if_;
 
-	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, cur);
-	if (tid = TID_ERROR){
+	struct thread *cur = thread_current();
+	memcpy(&cur->parent_tf, my_data.parent_f , sizeof(struct intr_frame));
+
+	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, &my_data);
+	if (tid == TID_ERROR){
 		return TID_ERROR;
 	}
 
@@ -119,11 +162,12 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	sema_down(&child->process_sema);
 	if(child->exit_status == TID_ERROR)
 	{
+		sema_up(&child->exit_sema);
+		
 		return TID_ERROR;
 	}
 
 	return tid;
-	// return thread_create (name, PRI_DEFAULT, __do_fork, thread_current ());
 }
 
 #ifndef VM
@@ -153,7 +197,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
-	newpage = palloc_get_page(PAL_USER | PAL_ZERO);
+	newpage = palloc_get_page(PAL_USER);
 	if (newpage == NULL){
 		return false;
 	}
@@ -188,15 +232,14 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  * 즉, process_fork의 두 번째 인수를 이 함수에 전달해야 합니다.
  */
 static void
-__do_fork (void *aux) {
+__do_fork (struct parent_info *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *) aux;
+	struct thread *parent = aux->parent;
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) 
 	 * 어떻게든 parent_if를 전달해라.
 	 */
-	
-	struct intr_frame *parent_if = &parent->parent_tf;
+	struct intr_frame *parent_if = aux->parent_f;
 
 	bool succ = true;
 
@@ -224,17 +267,6 @@ __do_fork (void *aux) {
      * TODO:       in include/filesys/file.h. Note that parent should not return
      * TODO:       from the fork() until this function successfully duplicates
      * TODO:       the resources of parent.*/
-	// struct list_elem* e = list_begin(&parent->fd_table);
-	// 	for(int i = 0; i< list_size(&parent->fd_table); ++i)
-	// 	{
-	// 		struct file_descriptor* file_desc =list_entry(e,struct file_descriptor, fd_elem);
-	// 		struct file_descriptor* tmp_file_desc;
-	// 		tmp_file_desc->fd = file_desc->fd;
-	// 		tmp_file_desc->file = file_duplicate(file_desc->file);
-	// 		list_push_back(&tmp_file_desc->fd_elem,&current->fd_table);
-			
-	// 	}
-	// current->last_created_fd = parent->last_created_fd;
 
 	struct list_elem* e = list_begin(&parent->fd_table);
 	struct list *parent_list = &parent->fd_table;
@@ -264,7 +296,7 @@ __do_fork (void *aux) {
     if (succ)
         do_iret(&if_);
 error:
-    sema_up(&current->process_sema);
+    // sema_up(&current->process_sema);
     exit(TID_ERROR);
 }
 
@@ -295,27 +327,13 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
-	char *stk[64];
-   	char *token, *save_ptr;
-	int i = 0; 
-
-   	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
-		stk[i] = token;
-		i++;
-	}
-
 	/* And then load the binary */
+	lock_acquire(&filesys_lock);
 	success = load (file_name, &_if);
-
-	argument_stack(stk, i, &_if);
-	// argument_stack(stk, i, &_if);
-	_if.R.rdi = i;
-	_if.R.rsi = (char*)_if.rsp + 8;
-
+	lock_release(&filesys_lock);
 
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true);
 
-	// argument_stack(argv, i, &_if);
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 	if (!success)
@@ -337,15 +355,10 @@ process_exec (void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-
-	// for (uint64_t i; i < 40000000000; i++){
-
-	// }
-	// return -1;
 	struct thread *t = get_thread_from_tid(child_tid);
 	if (t == NULL) {
 		return -1;
@@ -376,16 +389,12 @@ process_exit (void) {
 		t->running = NULL;
 	}
 
-
 	struct list *exit_list = &t->fd_table;
 	struct list_elem *e = list_begin(&exit_list);
-	for(int i = 2; i< t->last_created_fd; ++i)
+	for(int i = 2; i< t->last_created_fd; ++i){
 		close(i);
-	// int fd = 2; 
-	// for(struct list_elem *e = list_begin(&t->fd_table); e != NULL ; e = list_next(&t->fd_table)){
-	// 	fd ++;
-	// 	close (fd);	
-	// }
+	}
+
 	file_close(t->running);
 	process_cleanup();
 	sema_up(&t->wait_sema);
@@ -520,13 +529,24 @@ load (const char *file_name, struct intr_frame *if_) {
 	struct file *file = NULL;
 	off_t file_ofs;
 	bool success = false;
-	int i;
-	
+	int i, j;
+
+	//스택에 전달받은 인자를 쌓아주는 작업
+	char *stk[64];
+	int argc = 0;
+	char *token, *save_ptr;
+
+   	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
+		stk[argc] = token;
+		argc++;
+	}
+
 	/* Allocate and activate page directory. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
+
 	/* Open executable file. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
@@ -594,7 +614,9 @@ load (const char *file_name, struct intr_frame *if_) {
                 break;
         }
 	}
+
 	t->running = file; 
+
 	file_deny_write(file);
 	/* Set up stack. */
 	if (!setup_stack (if_))
@@ -604,7 +626,10 @@ load (const char *file_name, struct intr_frame *if_) {
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	//  * TODO: Implement argument passing (see project2/argument_passing.html). */
+	argument_stack(stk, argc, if_);
+	if_->R.rsi = if_->rsp + 8;
+	if_->R.rdi = argc;	
 
 	success = true;
 
@@ -835,36 +860,6 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
-
-
-void argument_stack (char **argv, int argc, struct intr_frame *if_){
-	
-	int minus_addr;
-	int address = if_->rsp;
-	for (int i = argc-1; i >= 0;i-- ){
-		minus_addr = strlen(argv[i]) + 1; //if onearg, value = 7 
-		address -= minus_addr;
-		memcpy(address, argv[i], minus_addr);
-		argv[i] = (char *)address;
-	}
-
-	if (address % 8){
-		int word_align = address % 8;
-		address -= word_align;
-		memset(address, 0, word_align);
-	}
-
-	address -= 8;
-
-	for (int i = argc; i>=0; i-- ){
-		address -= 8;
-		memcpy(address, &argv[i], 8);
-	}
-
-	address -= 8;
-	memset(address, 0, 8);
-	if_->rsp = address;
-}
 
 struct thread *get_thread_from_tid(tid_t thread_id){
 
