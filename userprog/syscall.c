@@ -293,18 +293,11 @@ int open (const char *file)
 
 void close (int fd) {
 
-	struct thread *curr = thread_current();
-	struct list_elem *start;
-	for (start = list_begin(&curr->fd_table); start != list_end(&curr->fd_table); start = list_next(start))
-	{
-		struct file_descriptor *close_fd = list_entry(start, struct file_descriptor, fd_elem);
-		if (close_fd->fd == fd)
-		{
-			file_close(close_fd->file);
-			list_remove(&close_fd->fd_elem);
-		}
-	}
-	return;
+	struct file_descriptor *close_fd = find_file_descriptor(fd);
+	if(close_fd == NULL)
+		return -1;
+	file_close(close_fd->file);
+	list_remove(&close_fd->fd_elem);
 }
 
 int filesize (int fd)
@@ -320,8 +313,6 @@ int read (int fd, void *buffer, unsigned size)
 	if(pml4_get_page(thread_current()->pml4, buffer) == NULL || buffer == NULL || !is_user_vaddr(buffer) || fd < 0)
 		exit(-1);
 
-	struct thread *curr = thread_current();
-	struct list_elem *start;
 	off_t buff_size;
 
 	if (fd == 0)
@@ -332,19 +323,14 @@ int read (int fd, void *buffer, unsigned size)
 	{
 		exit(-1);
 	}
-	// bad-fd는 page-fault를 일으키기 때문에 page-fault를 처리하는 함수에서 확인
 	else
 	{
-		for (start = list_begin(&curr->fd_table); start != list_end(&curr->fd_table); start = list_next(start))
-		{
-			struct file_descriptor *read_fd = list_entry(start, struct file_descriptor, fd_elem);
-			if (read_fd->fd == fd)
-			{
-				lock_acquire(&filesys_lock);
-				buff_size = file_read(read_fd->file, buffer, size);
-				lock_release(&filesys_lock);
-			}
-		}
+		struct file_descriptor *read_fd = find_file_descriptor(fd);
+		if(read_fd == NULL)
+			return -1;
+		lock_acquire(&filesys_lock);
+		buff_size = file_read(read_fd->file, buffer, size);
+		lock_release(&filesys_lock);
 	}
 	return buff_size;
 }
@@ -354,68 +340,38 @@ int write (int fd, const void *buffer, unsigned size)
 	if(pml4_get_page(thread_current()->pml4, buffer) == NULL || buffer == NULL || !is_user_vaddr(buffer) || fd < 0)
 		exit(-1);
 
-	struct thread *curr = thread_current();
-	struct list_elem *start;
 	if (fd == 1)
 	{
 		putbuf(buffer, size);
 		return size;
-		// fd == 1이라는 의미는 표준 출력을 의미함. 따라서 화면에 입력된 데이터를 출력하는 함수 pufbuf를 호출.
-		// putbuf 함수는 buffer에 입력된 데이터를 size만큼 화면에 출력하는 함수.
-		// 이후 버퍼의 크기 -> size를 반환한다.
 	}
 	else if (fd < 0 || fd == NULL)
 	{
 		exit(-1);
 	}
-	for (start = list_begin(&curr->fd_table); start != list_end(&curr->fd_table); start = list_next(start))
-	{
-		struct file_descriptor *write_fd = list_entry(start, struct file_descriptor, fd_elem);
-		if (write_fd->fd == fd)
-		{
-			lock_acquire(&filesys_lock);
-			off_t write_size = file_write(write_fd->file, buffer, size);
-			// fd == 0 과 fd == 1은 표준 입출력을 의미하는 파일 식별자이기 때문에 해당되는 파일이 존재하지 않는다.
-			// 따라서 정상적인 write가 이루어지지 않는다. fd == 1이면 write 함수의 반환값은 0임.
-			lock_release(&filesys_lock);
-			return write_size;
-		}
-	}
+	struct file_descriptor *write_fd = find_file_descriptor(fd);
+		if(write_fd == NULL)
+			return -1;
+	lock_acquire(&filesys_lock);
+	off_t write_size = file_write(write_fd->file, buffer, size);
+	lock_release(&filesys_lock);
+	return write_size;
 }
 
 void seek (int fd, unsigned position)
 {
-
-	struct thread *curr = thread_current();
-	struct list_elem *start;
-
-	for (start = list_begin(&curr->fd_table); start != list_end(&curr->fd_table); start = list_next(start))
-	{
-		struct file_descriptor *seek_fd = list_entry(start, struct file_descriptor, fd_elem);
-		if (seek_fd->fd == fd)
-		{
-			return file_seek(seek_fd->file, position);
-		}
-	}
-
-
+	struct file_descriptor *seek_fd = find_file_descriptor(fd);
+	if(seek_fd == NULL)
+		return -1;
+		return file_seek(seek_fd->file, position);
 }
 
 unsigned tell (int fd)
 {
-
-	struct thread *curr = thread_current();
-	struct list_elem *start;
-
-	for (start = list_begin(&curr->fd_table); start != list_end(&curr->fd_table); start = list_next(start))
-	{
-		struct file_descriptor *tell_fd = list_entry(start, struct file_descriptor, fd_elem);
-		if (tell_fd->fd == fd)
-		{
+	struct file_descriptor *tell_fd = find_file_descriptor(fd);
+	if(tell_fd == NULL)
+		return -1;
 			return file_tell(tell_fd->file);
-		}
-	}
-
 }
 
 int process_add_file(struct file *f)
