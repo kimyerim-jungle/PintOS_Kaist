@@ -287,7 +287,7 @@ __do_fork (struct parent_info *aux) {
 	}
 
 	if_.R.rax = 0;
-
+	
     // 로드가 완료될 때까지 기다리고 있던 부모 대기 해제
     sema_up(&current->process_sema);
     process_init();
@@ -296,7 +296,7 @@ __do_fork (struct parent_info *aux) {
     if (succ)
         do_iret(&if_);
 error:
-    // sema_up(&current->process_sema);
+    sema_up(&current->process_sema);
     exit(TID_ERROR);
 }
 
