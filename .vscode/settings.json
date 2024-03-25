@@ -24,7 +24,9 @@
         "tests.h": "c",
         "palloc.h": "c",
         "stdio.h": "c",
-        "interrupt.h": "c"
+        "interrupt.h": "c",
+        "inspect.h": "c",
+        "vm.h": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }

@@ -7,6 +7,13 @@ struct page;
 enum vm_type;
 
 struct file_page {
+	/* Initiate the contets of the page */
+	vm_initializer *init;
+	enum vm_type type;
+	void *aux;
+	/* Initiate the struct page and maps the pa to the va 
+	 * 페이지를 초기화하고 물리주소를 가상주소에 매핑합니다.
+	 */
 };
 
 void vm_file_init (void);

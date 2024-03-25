@@ -27,6 +27,7 @@ enum vm_type {
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
+#include "lib/kernel/hash.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
@@ -39,7 +40,12 @@ struct thread;
 /* The representation of "page".
  * This is kind of "parent class", which has four "child class"es, which are
  * uninit_page, file_page, anon_page, and page cache (project4).
- * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. */
+ * DO NOT REMOVE/MODIFY PREDEFINED MEMBER OF THIS STRUCTURE. 
+ * 페이지의 표현입니다.
+ * 이것은 일종의 "학부모 클래스"로 uninit_page, file_page, anon_page, 
+ * page cache(프로젝트 4)의 4개의 "학부모 클래스"가 있습니다.
+ * 이 구조물의 미리 정의된 부재를 제거/수정하지 마십시오.
+ */
 struct page {
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
@@ -68,7 +74,11 @@ struct frame {
 /* The function table for page operations.
  * This is one way of implementing "interface" in C.
  * Put the table of "method" into the struct's member, and
- * call it whenever you needed. */
+ * call it whenever you needed. 
+ * 페이지 작업을 위한 함수 테이블입니다.
+ * 이것은 C에서 "인터페이스"를 구현하는 한 방법입니다.
+ * struct 부재에 "method"이라는 표를 넣고, 필요할 때마다 호출합니다.
+ */
 struct page_operations {
 	bool (*swap_in) (struct page *, void *);
 	bool (*swap_out) (struct page *);
@@ -83,8 +93,14 @@ struct page_operations {
 
 /* Representation of current process's memory space.
  * We don't want to force you to obey any specific design for this struct.
- * All designs up to you for this. */
+ * All designs up to you for this.
+ * 현재 프로세스의 메모리 공간을 나타냅니다.
+ * 이 구조물에 대한 특정 설계를 따르도록 강요하고 싶지 않습니다.
+ * 이를 위한 모든 디자인은 귀하에게 달려 있습니다. 
+ */
 struct supplemental_page_table {
+	struct hash hash_table;
+
 };
 
 #include "threads/thread.h"
@@ -108,5 +124,10 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
 void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
+
+//구현
+// 구현
+unsigned page_hash (const struct hash_elem *p_, void *aux UNUSED);
+bool page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 
 #endif  /* VM_VM_H */
