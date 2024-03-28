@@ -310,6 +310,7 @@ int open(const char *file)
         file_close(open_file);
     lock_release(&filesys_lock);
     return fd;
+
 }
 
 void close(int fd)
