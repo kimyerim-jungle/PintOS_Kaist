@@ -25,6 +25,13 @@ enum vm_type
     VM_MARKER_END = (1 << 31),
 };
 
+enum page_type
+{
+    IS_FRAME = 0,
+    IS_DISK = 1,
+    IS_SWAP = 2,
+};
+
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
@@ -50,6 +57,11 @@ struct page
 
     /* Your implementation */
     struct hash_elem h_elem;
+
+    int maker;
+    enum page_type where; // 데이터가 존재하는 곳
+    bool is_active;
+    bool writable;
 
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
@@ -81,6 +93,14 @@ struct page_operations
     bool (*swap_out)(struct page *);
     void (*destroy)(struct page *);
     enum vm_type type;
+};
+
+struct necessary_info
+{
+    struct file *file;
+    uint32_t read_byte;
+    uint32_t zero_byte;
+    bool writable;
 };
 
 #define swap_in(page, v) (page)->operations->swap_in((page), v)
