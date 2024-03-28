@@ -81,6 +81,7 @@ struct frame
 {
     void *kva;
     struct page *page;
+    struct list_elem f_elem;
 };
 
 /* The function table for page operations.
@@ -98,6 +99,7 @@ struct page_operations
 struct necessary_info
 {
     struct file *file;
+    off_t ofs;
     uint32_t read_byte;
     uint32_t zero_byte;
     bool writable;
