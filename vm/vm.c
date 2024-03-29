@@ -305,16 +305,15 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
     struct hash_iterator i;
 
     hash_first(&i, src_hash);
-    // printf("copy tid %d\n", thread_current()->tid);
-    // lock_acquire(&vm_lock);
     while (hash_next(&i))
     {
         struct page *p = hash_entry(hash_cur(&i), struct page, h_elem);
         if (p == NULL)
             return false;
         enum vm_type type = page_get_type(p);
-        // printf("type %d  p->type %d\n", type, p->operations->type);
         struct page *child;
+
+        // printf("type %d\n", p->operations->type);
 
         if (p->operations->type == VM_UNINIT)
         {

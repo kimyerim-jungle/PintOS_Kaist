@@ -17,6 +17,8 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
+#include "vm/vm.h"
+
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 void halt(void);
@@ -294,7 +296,7 @@ int open(const char *file)
     if (!is_user_vaddr(file))
         exit(-1);
 
-    if (pml4_get_page(thread_current()->pml4, file) == NULL || file == NULL || *file == '\0')
+    if (pml4_get_page(thread_current()->pml4, file) == NULL || file == NULL)
         exit(-1);
 
     lock_acquire(&filesys_lock);
@@ -310,7 +312,6 @@ int open(const char *file)
         file_close(open_file);
     lock_release(&filesys_lock);
     return fd;
-
 }
 
 void close(int fd)
@@ -333,11 +334,14 @@ int filesize(int fd)
 
 int read(int fd, void *buffer, unsigned size)
 {
-    if (pml4_get_page(thread_current()->pml4, buffer) == NULL || buffer == NULL || !is_user_vaddr(buffer) || fd < 0)
+    if (buffer == NULL || fd < 0 || !is_user_vaddr(buffer))
+        exit(-1);
+
+    struct page *p = spt_find_page(&thread_current()->spt, buffer);
+    if (p == NULL)
         exit(-1);
 
     off_t buff_size;
-
     if (fd == 0)
     {
         return input_getc();
