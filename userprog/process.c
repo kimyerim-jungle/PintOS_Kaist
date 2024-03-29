@@ -258,7 +258,6 @@ __do_fork(struct parent_info *aux)
     current->pml4 = pml4_create();
     if (current->pml4 == NULL)
         goto error;
-
     process_activate(current);
 #ifdef VM
     supplemental_page_table_init(&current->spt);
@@ -268,7 +267,6 @@ __do_fork(struct parent_info *aux)
     if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
         goto error;
 #endif
-
     /* TODO: Your code goes here.
      * TODO: Hint) To duplicate the file object, use `file_duplicate`
      * TODO:       in include/filesys/file.h. Note that parent should not return
@@ -912,13 +910,10 @@ setup_stack(struct intr_frame *if_)
      * TODO: You should mark the page is stack. */
     /* TODO: Your code goes here */
 
-    struct page *page = palloc_get_page(0);
-    page->va = stack_bottom;
-
     if (!vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, stack_bottom,
                                         1, NULL, NULL))
         return false;
-    if (!vm_claim_page(page->va))
+    if (!vm_claim_page(stack_bottom))
         return false;
 
     success = true;
