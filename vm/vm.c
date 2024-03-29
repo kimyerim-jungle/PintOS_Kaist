@@ -341,7 +341,7 @@ void hash_elem_destroy(struct hash_elem *e, void *aux UNUSED)
 {
     struct page *p = hash_entry(e, struct page, h_elem);
     destroy(p);
-    free(p);
+    palloc_free_page(p);
 }
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)

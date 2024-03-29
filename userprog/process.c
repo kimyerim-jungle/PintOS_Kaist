@@ -868,7 +868,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
     while (read_bytes > 0 || zero_bytes > 0)
     {
-
+        // printf("read %d\n", read_bytes);
         /* Do calculate how to fill this page.
          * We will read PAGE_READ_BYTES bytes from FILE
          * and zero the final PAGE_ZERO_BYTES bytes. */
@@ -883,7 +883,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         nec->ofs = ofs;
         nec->read_byte = read_bytes;
         nec->zero_byte = zero_bytes;
-        nec->writable = writable;
+        // nec->writable = writable;
         aux = nec;
 
         if (!vm_alloc_page_with_initializer(VM_ANON, upage,
