@@ -26,7 +26,8 @@
         "stdio.h": "c",
         "interrupt.h": "c",
         "inspect.h": "c",
-        "vm.h": "c"
+        "vm.h": "c",
+        "mmu.h": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }
