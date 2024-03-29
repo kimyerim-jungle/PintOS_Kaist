@@ -9,6 +9,7 @@
 #include "threads/pte.h"
 #include "threads/mmu.h"
 #include "kernel/list.h"
+#include "lib/string.h"
 
 struct list frame_table;
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -25,6 +26,7 @@ void vm_init(void)
     /* TODO: Your code goes here. */
 
     list_init(&frame_table);
+    lock_init(&vm_lock);
 }
 
 /* Get the type of the page. This function is useful if you want to know the
@@ -58,7 +60,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
     ASSERT(VM_TYPE(type) != VM_UNINIT)
 
     struct supplemental_page_table *spt = &thread_current()->spt;
-
+    // printf("thcu tid %d\n", thread_current()->tid);
     /* Check wheter the upage is already occupied or not. */
     if (spt_find_page(spt, upage) == NULL)
     {
@@ -98,7 +100,6 @@ spt_find_page(struct supplemental_page_table *spt, void *va)
     struct hash *hash = &spt->hash_table;
 
     page = (struct page *)palloc_get_page(0);
-    // page = (struct page *)malloc(sizeof(struct page));
     page->va = pg_round_down(va);
     struct hash_elem *e = hash_find(hash, &page->h_elem);
     if (e == NULL)
@@ -107,10 +108,8 @@ spt_find_page(struct supplemental_page_table *spt, void *va)
         return NULL;
     }
     palloc_free_page(page);
-    // free(page);
     page = hash_entry(e, struct page, h_elem);
 
-    // printf("done\n");
     return page;
 }
 
@@ -122,18 +121,22 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
     /* TODO: Fill this function. */
     struct hash *hash = &spt->hash_table;
 
+    lock_acquire(&vm_lock);
     if (hash_insert(hash, &page->h_elem) != NULL)
     {
+        lock_release(&vm_lock);
         return succ;
     }
-
+    lock_release(&vm_lock);
     succ = true;
     return succ;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
+    lock_acquire(&vm_lock);
     vm_dealloc_page(page);
+    lock_release(&vm_lock);
     return true;
 }
 
@@ -143,7 +146,9 @@ vm_get_victim(void)
 {
     struct frame *victim = NULL;
     /* TODO: The policy for eviction is up to you. */
+    lock_acquire(&vm_lock);
     struct list_elem *e = list_pop_front(&frame_table);
+    lock_release(&vm_lock);
     victim = list_entry(e, struct frame, f_elem);
     return victim;
 }
@@ -184,7 +189,9 @@ vm_get_frame(void)
     frame->kva = kva;
     frame->page = page;
 
+    lock_acquire(&vm_lock);
     list_push_back(&frame_table, &frame->f_elem);
+    lock_release(&vm_lock);
 
     ASSERT(frame != NULL);
     ASSERT(frame->page == NULL);
@@ -276,7 +283,7 @@ static bool vm_do_claim_page(struct page *page)
     struct thread *cur = thread_current();
     if (pml4_get_page(cur->pml4, pg_round_down(page->va)) || !pml4_set_page(cur->pml4, pg_round_down(page->va), pg_round_down(frame->kva), page->writable))
     {
-        printf("pml4 set false\n");
+        // printf("pml4 set false\n");
         return false;
     }
 
@@ -293,13 +300,60 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
                                   struct supplemental_page_table *src UNUSED)
 {
+    struct hash *src_hash = &src->hash_table;
+    struct hash *dst_hash = &dst->hash_table;
+    struct hash_iterator i;
+
+    hash_first(&i, src_hash);
+    // printf("copy tid %d\n", thread_current()->tid);
+    // lock_acquire(&vm_lock);
+    while (hash_next(&i))
+    {
+        struct page *p = hash_entry(hash_cur(&i), struct page, h_elem);
+        if (p == NULL)
+            return false;
+        enum vm_type type = page_get_type(p);
+        // printf("type %d  p->type %d\n", type, p->operations->type);
+        struct page *child;
+
+        if (p->operations->type == VM_UNINIT)
+        {
+            // uninit_new(child, p->va, NULL, p->operations->type, NULL, NULL);
+            if (!vm_alloc_page_with_initializer(type, p->va, p->writable, p->uninit.init, p->uninit.aux))
+                return false;
+        }
+        else
+        {
+            if (!vm_alloc_page(type, p->va, p->writable))
+                return false;
+            if (!vm_claim_page(p->va))
+                return false;
+
+            child = spt_find_page(dst, p->va);
+            memcpy(child->frame->kva, p->frame->kva, PGSIZE);
+        }
+    }
+
+    return true;
 }
 
+void hash_elem_destroy(struct hash_elem *e, void *aux UNUSED)
+{
+    struct page *p = hash_entry(e, struct page, h_elem);
+    destroy(p);
+    free(p);
+}
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
     /* TODO: Destroy all the supplemental_page_table hold by thread and
      * TODO: writeback all the modified contents to the storage. */
+    struct hash *hash = &spt->hash_table;
+
+    // lock_acquire(&vm_lock);
+    // hash_destroy(hash, hash_elem_destroy);
+    // // lock_release(&vm_lock);
+    hash_clear(hash, hash_elem_destroy);
 }
 
 unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED)
