@@ -117,6 +117,7 @@ void syscall_handler(struct intr_frame *f)
 
     struct thread *t = thread_current();
     t->tf = *f;
+    t->rsp_stack = f->rsp;
 
     // int size = palloc_init();
 
