@@ -11,6 +11,9 @@
 #include "kernel/list.h"
 #include "lib/string.h"
 
+static uint64_t cur_stack_size = PGSIZE;
+static uint64_t limit_stack_size = (1 << 20);
+
 struct list frame_table;
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -200,8 +203,16 @@ vm_get_frame(void)
 
 /* Growing the stack. */
 static void
-vm_stack_growth(void *addr UNUSED)
+vm_stack_growth(void *addr)
 {
+    void *stack_bottom = thread_current()->rsp_stack;
+
+    if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1))
+    {
+        thread_current()->stack_bottom = stack_bottom;
+    }
+    // cur_stack_size += PGSIZE;
+    //  printf("size %ld\n", cur_stack_size);
 }
 
 /* Handle the fault on write_protected page */
@@ -230,6 +241,17 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 
     if (not_present)
     {
+        void *rsp;
+        if (user)
+            rsp = f->rsp;
+        else
+            rsp = thread_current()->rsp_stack;
+
+        if (rsp - 8 <= addr && USER_STACK - 0x100000 <= addr && addr <= USER_STACK)
+        {
+            vm_stack_growth(pg_round_down(addr));
+        }
+
         page = spt_find_page(spt, addr);
 
         if (page == NULL)
@@ -330,6 +352,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 
             child = spt_find_page(dst, p->va);
             memcpy(child->frame->kva, p->frame->kva, PGSIZE);
+            // memcpy(child->va, p->va, PGSIZE);
         }
     }
 

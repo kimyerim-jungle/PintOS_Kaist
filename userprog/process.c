@@ -920,6 +920,8 @@ setup_stack(struct intr_frame *if_)
 
     success = true;
     if_->rsp = USER_STACK;
+    thread_current()->rsp_stack = if_->rsp;
+    thread_current()->stack_bottom = stack_bottom;
     return success;
 }
 #endif /* VM */
