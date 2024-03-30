@@ -255,10 +255,12 @@ __do_fork(struct parent_info *aux)
     if_.R.rax = 0; // 자식 프로세스의 리턴값은 0
 
     /* 2. Duplicate PT */
+
     current->pml4 = pml4_create();
     if (current->pml4 == NULL)
         goto error;
     process_activate(current);
+    // printf("copt start\n");
 #ifdef VM
     supplemental_page_table_init(&current->spt);
     if (!supplemental_page_table_copy(&current->spt, &parent->spt))
