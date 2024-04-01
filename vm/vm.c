@@ -205,11 +205,9 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr)
 {
-    void *stack_bottom = thread_current()->rsp_stack;
-
-    if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1))
+    if (vm_alloc_page(VM_ANON | VM_MARKER_0, addr, 1))
     {
-        thread_current()->stack_bottom = stack_bottom;
+        thread_current()->stack_bottom -= PGSIZE;
     }
     // cur_stack_size += PGSIZE;
     //  printf("size %ld\n", cur_stack_size);
@@ -247,11 +245,15 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
         else
             rsp = thread_current()->rsp_stack;
 
-        if (rsp - 8 <= addr && USER_STACK - 0x100000 <= addr && addr <= USER_STACK)
+        // if (rsp - 8 <= addr && USER_STACK - 0x100000 <= addr && addr <= USER_STACK)
+        if (rsp - 8 <= addr && USER_STACK - 0x100000 <= rsp - 8 && addr <= USER_STACK)
         {
             vm_stack_growth(pg_round_down(addr));
         }
-
+        else if (rsp <= addr && USER_STACK - 0x100000 <= rsp && addr <= USER_STACK)
+        {
+            vm_stack_growth(pg_round_down(addr));
+        }
         page = spt_find_page(spt, addr);
 
         if (page == NULL)
@@ -262,6 +264,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
             return false;
         return vm_do_claim_page(page);
     }
+
     return false;
 }
 
