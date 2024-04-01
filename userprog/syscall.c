@@ -36,6 +36,9 @@ void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
 
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
+
 int insert_file_fdt(struct file *file);
 int process_add_file(struct file *f);
 struct file_descriptor *find_file_descriptor(int fd);
@@ -202,6 +205,14 @@ void syscall_handler(struct intr_frame *f)
         close(f->R.rdi);
         break;
 
+    case SYS_MMAP:
+        f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+        break;
+
+    case SYS_MUNMAP:
+        munmap(f->R.rdi);
+        break;
+
     default:
         break;
     }
@@ -324,6 +335,7 @@ void close(int fd)
         return -1;
     file_close(close_fd->file);
     list_remove(&close_fd->fd_elem);
+    // free(close_fd);
 }
 
 int filesize(int fd)
@@ -338,10 +350,7 @@ int read(int fd, void *buffer, unsigned size)
 {
     if (buffer == NULL || fd < 0 || !is_user_vaddr(buffer))
         exit(-1);
-
     struct page *p = spt_find_page(&thread_current()->spt, buffer);
-    if (p == NULL)
-        exit(-1);
 
     off_t buff_size;
     if (fd == 0)
@@ -357,6 +366,9 @@ int read(int fd, void *buffer, unsigned size)
         struct file_descriptor *read_fd = find_file_descriptor(fd);
         if (read_fd == NULL)
             return -1;
+        if (p && !p->writable)
+            exit(-1);
+
         lock_acquire(&filesys_lock);
         buff_size = file_read(read_fd->file, buffer, size);
         lock_release(&filesys_lock);
@@ -366,7 +378,10 @@ int read(int fd, void *buffer, unsigned size)
 
 int write(int fd, const void *buffer, unsigned size)
 {
-    if (pml4_get_page(thread_current()->pml4, buffer) == NULL || buffer == NULL || !is_user_vaddr(buffer) || fd < 0)
+    if (buffer == NULL || !is_user_vaddr(buffer) || fd < 0)
+        exit(-1);
+    struct page *p = spt_find_page(&thread_current()->spt, buffer);
+    if (p == NULL)
         exit(-1);
 
     if (fd == 1)
@@ -381,6 +396,8 @@ int write(int fd, const void *buffer, unsigned size)
     struct file_descriptor *write_fd = find_file_descriptor(fd);
     if (write_fd == NULL)
         return -1;
+    if (p && !p->writable)
+        exit(-1);
     lock_acquire(&filesys_lock);
     off_t write_size = file_write(write_fd->file, buffer, size);
     lock_release(&filesys_lock);
@@ -418,7 +435,18 @@ int process_add_file(struct file *f)
     return new_fd->fd;
 }
 
-// void check_stack(void *buf, unsigned size, void *rsp, bool to_write)
-// {
-//     if (buf <= USER_STACK)
-// }
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+    if (length == 0 || addr == NULL || !is_user_vaddr(addr) || fd == 1 || fd == 0) // is_user_vaddr(addr) ||
+        return NULL;
+    struct page *page = spt_find_page(&thread_current()->spt, addr);
+    struct file_descriptor *file = find_file_descriptor(fd);
+
+    if (file->file == NULL)
+        return NULL;
+    return do_mmap(addr, length, writable, file->file, pg_ofs(offset));
+}
+void munmap(void *addr)
+{
+    do_munmap(addr);
+}
