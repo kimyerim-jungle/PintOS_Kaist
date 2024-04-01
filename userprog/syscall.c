@@ -117,8 +117,9 @@ void syscall_handler(struct intr_frame *f)
 
     struct thread *t = thread_current();
     t->tf = *f;
+#ifdef VM
     t->rsp_stack = f->rsp;
-
+#endif
     // int size = palloc_init();
 
     // 주소가 유호한지 확인
@@ -416,3 +417,8 @@ int process_add_file(struct file *f)
 
     return new_fd->fd;
 }
+
+// void check_stack(void *buf, unsigned size, void *rsp, bool to_write)
+// {
+//     if (buf <= USER_STACK)
+// }
