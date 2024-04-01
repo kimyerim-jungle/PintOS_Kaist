@@ -338,12 +338,8 @@ int read(int fd, void *buffer, unsigned size)
 {
     if (buffer == NULL || fd < 0 || !is_user_vaddr(buffer))
         exit(-1);
-
-    struct page *p = spt_find_page(&thread_current()->spt, buffer);
-    if (p == NULL)
-        exit(-1);
-
-    off_t buff_size;
+    
+    off_t buff_size = 0;
     if (fd == 0)
     {
         return input_getc();
@@ -357,6 +353,10 @@ int read(int fd, void *buffer, unsigned size)
         struct file_descriptor *read_fd = find_file_descriptor(fd);
         if (read_fd == NULL)
             return -1;
+        struct page *page = spt_find_page(&thread_current()->spt, buffer);
+        if (page && !page->writable){
+            exit(-1);
+        }
         lock_acquire(&filesys_lock);
         buff_size = file_read(read_fd->file, buffer, size);
         lock_release(&filesys_lock);
