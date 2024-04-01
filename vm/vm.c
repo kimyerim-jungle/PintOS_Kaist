@@ -71,10 +71,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
          * TODO: and then create "uninit" page struct by calling uninit_new. You
          * TODO: should modify the field after calling the uninit_new. */
 
-        // struct page *new_page = (struct page *)malloc(sizeof(struct page));
-        struct page *new_page = palloc_get_page(0);
-        //  new_page->va = palloc_get_page(PAL_USER);
-        //   struct uninit_page un_page;
+        struct page *new_page = (struct page *)malloc(sizeof(struct page)); // palloc_get_page(0);
 
         if (VM_TYPE(type) == VM_ANON)
         {
@@ -205,12 +202,7 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr)
 {
-    if (vm_alloc_page(VM_ANON | VM_MARKER_0, addr, 1))
-    {
-        thread_current()->stack_bottom -= PGSIZE;
-    }
-    // cur_stack_size += PGSIZE;
-    //  printf("size %ld\n", cur_stack_size);
+    vm_alloc_page(VM_ANON | VM_MARKER_0, addr, 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -227,7 +219,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
     struct page *page = NULL;
     /* TODO: Validate the fault */
     /* TODO: Your code goes here */
-    // if (user)
+
     if (is_kernel_vaddr(addr))
     {
         return false;
@@ -245,15 +237,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
         else
             rsp = thread_current()->rsp_stack;
 
-        // if (rsp - 8 <= addr && USER_STACK - 0x100000 <= addr && addr <= USER_STACK)
         if (rsp - 8 <= addr && USER_STACK - 0x100000 <= rsp - 8 && addr <= USER_STACK)
         {
             vm_stack_growth(pg_round_down(addr));
         }
-        else if (rsp <= addr && USER_STACK - 0x100000 <= rsp && addr <= USER_STACK)
-        {
-            vm_stack_growth(pg_round_down(addr));
-        }
+
         page = spt_find_page(spt, addr);
 
         if (page == NULL)
@@ -338,8 +326,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
         enum vm_type type = page_get_type(p);
         struct page *child;
 
-        // printf("type %d\n", p->operations->type);
-
         if (p->operations->type == VM_UNINIT)
         {
             // uninit_new(child, p->va, NULL, p->operations->type, NULL, NULL);
@@ -355,7 +341,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 
             child = spt_find_page(dst, p->va);
             memcpy(child->frame->kva, p->frame->kva, PGSIZE);
-            // memcpy(child->va, p->va, PGSIZE);
         }
     }
 
@@ -365,8 +350,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 void hash_elem_destroy(struct hash_elem *e, void *aux UNUSED)
 {
     struct page *p = hash_entry(e, struct page, h_elem);
-    destroy(p);
-    palloc_free_page(p);
+    // destroy(p);
+    // palloc_free_page(p);
+    vm_dealloc_page(p);
 }
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
@@ -375,10 +361,8 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
      * TODO: writeback all the modified contents to the storage. */
     struct hash *hash = &spt->hash_table;
 
-    // lock_acquire(&vm_lock);
-    // hash_destroy(hash, hash_elem_destroy);
-    // // lock_release(&vm_lock);
     hash_clear(hash, hash_elem_destroy);
+    // hash_destroy(hash, hash_elem_destroy);
 }
 
 unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED)
