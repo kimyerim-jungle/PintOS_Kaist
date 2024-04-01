@@ -36,6 +36,9 @@ void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
 
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
+
 int insert_file_fdt(struct file *file);
 int process_add_file(struct file *f);
 struct file_descriptor *find_file_descriptor(int fd);
@@ -202,6 +205,14 @@ void syscall_handler(struct intr_frame *f)
         close(f->R.rdi);
         break;
 
+    case SYS_MMAP:
+        f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+        break;
+
+    case SYS_MUNMAP:
+        munmap(f->R.rdi);
+        break;
+
     default:
         break;
     }
@@ -324,6 +335,7 @@ void close(int fd)
         return -1;
     file_close(close_fd->file);
     list_remove(&close_fd->fd_elem);
+    // free(close_fd);
 }
 
 int filesize(int fd)
@@ -338,8 +350,9 @@ int read(int fd, void *buffer, unsigned size)
 {
     if (buffer == NULL || fd < 0 || !is_user_vaddr(buffer))
         exit(-1);
-    
-    off_t buff_size = 0;
+    struct page *p = spt_find_page(&thread_current()->spt, buffer);
+
+    off_t buff_size;
     if (fd == 0)
     {
         return input_getc();
@@ -353,10 +366,9 @@ int read(int fd, void *buffer, unsigned size)
         struct file_descriptor *read_fd = find_file_descriptor(fd);
         if (read_fd == NULL)
             return -1;
-        struct page *page = spt_find_page(&thread_current()->spt, buffer);
-        if (page && !page->writable){
+        if (p && !p->writable)
             exit(-1);
-        }
+
         lock_acquire(&filesys_lock);
         buff_size = file_read(read_fd->file, buffer, size);
         lock_release(&filesys_lock);
@@ -366,7 +378,10 @@ int read(int fd, void *buffer, unsigned size)
 
 int write(int fd, const void *buffer, unsigned size)
 {
-    if (pml4_get_page(thread_current()->pml4, buffer) == NULL || buffer == NULL || !is_user_vaddr(buffer) || fd < 0)
+    if (buffer == NULL || !is_user_vaddr(buffer) || fd < 0)
+        exit(-1);
+    struct page *p = spt_find_page(&thread_current()->spt, buffer);
+    if (p == NULL)
         exit(-1);
 
     if (fd == 1)
@@ -381,6 +396,8 @@ int write(int fd, const void *buffer, unsigned size)
     struct file_descriptor *write_fd = find_file_descriptor(fd);
     if (write_fd == NULL)
         return -1;
+    if (p && !p->writable)
+        exit(-1);
     lock_acquire(&filesys_lock);
     off_t write_size = file_write(write_fd->file, buffer, size);
     lock_release(&filesys_lock);
@@ -418,7 +435,36 @@ int process_add_file(struct file *f)
     return new_fd->fd;
 }
 
-// void check_stack(void *buf, unsigned size, void *rsp, bool to_write)
-// {
-//     if (buf <= USER_STACK)
-// }
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+    // 파일의 시작점(offset)이 page-align되지 않았을 때
+	if(offset % PGSIZE != 0){
+		return NULL;
+	}
+	// 가상 유저 page 시작 주소가 page-align되어있지 않을 때
+	/* failure case 2: 해당 주소의 시작점이 page-align되어 있는지 & user 영역인지 & 주소값이 null인지 & length가 0이하인지*/
+	if(pg_round_down(addr)!= addr || is_kernel_vaddr(addr) || addr == NULL || (long long)length <= 0){
+		return NULL;
+	}
+	// 매핑하려는 페이지가 이미 존재하는 페이지와 겹칠 때(==SPT에 존재하는 페이지일 때)
+	
+	if(spt_find_page(&thread_current()->spt,addr)){
+		return NULL;
+	}
+	
+	// 콘솔 입출력과 연관된 파일 디스크립터 값(0: STDIN, 1:STDOUT)일 때
+	if(fd == 0 || fd == 1){
+		exit(-1);
+	}
+	// 찾는 파일이 디스크에 없는경우
+	struct file * target = find_file_descriptor(fd)->file;
+	if (target==NULL){
+		return NULL;
+	}
+
+    return do_mmap(addr, length, writable, target, offset);
+}
+void munmap(void *addr)
+{
+    do_munmap(addr);
+}

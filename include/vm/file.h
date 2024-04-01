@@ -11,6 +11,7 @@ struct file_page
     enum vm_type type;
     void *aux;
     void *va;
+    struct file *file;
 };
 
 void vm_file_init(void);
