@@ -395,6 +395,8 @@ int write(int fd, const void *buffer, unsigned size)
     struct file_descriptor *write_fd = find_file_descriptor(fd);
     if (write_fd == NULL)
         return -1;
+    if (write_fd->file && write_fd->file->deny_write)
+        exit(-1);
     lock_acquire(&filesys_lock);
     off_t write_size = file_write(write_fd->file, buffer, size);
     lock_release(&filesys_lock);
