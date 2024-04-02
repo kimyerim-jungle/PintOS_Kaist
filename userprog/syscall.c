@@ -383,7 +383,6 @@ int write(int fd, const void *buffer, unsigned size)
     struct page *p = spt_find_page(&thread_current()->spt, buffer);
     if (p == NULL)
         exit(-1);
-    printf("fd is %d\n",fd);
     if (fd == 1)
     {
         putbuf(buffer, size);
@@ -393,17 +392,14 @@ int write(int fd, const void *buffer, unsigned size)
     {
         exit(-1);
     }
-    printf("111\n");
     struct file_descriptor *write_fd = find_file_descriptor(fd);
     if (write_fd == NULL)
         return -1;
     if (p && !p->writable)
         exit(-1);
-    printf("222\n");
     lock_acquire(&filesys_lock);
     off_t write_size = file_write(write_fd->file, buffer, size);
     lock_release(&filesys_lock);
-    printf("333\n");
     return write_size;
 }
 
