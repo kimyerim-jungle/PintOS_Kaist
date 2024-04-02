@@ -62,6 +62,7 @@ struct page
     enum page_type where; // 데이터가 존재하는 곳
     bool is_active;
     bool writable;
+    int mapped_page_count;
 
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
