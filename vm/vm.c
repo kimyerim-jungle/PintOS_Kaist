@@ -15,6 +15,7 @@ static uint64_t cur_stack_size = PGSIZE;
 static uint64_t limit_stack_size = (1 << 20);
 
 struct list frame_table;
+struct list empty_frame_list;
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void vm_init(void)
@@ -29,6 +30,7 @@ void vm_init(void)
     /* TODO: Your code goes here. */
 
     list_init(&frame_table);
+    list_init(&empty_frame_list);
     lock_init(&vm_lock);
 }
 
@@ -119,20 +121,19 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
     /* TODO: Fill this function. */
     struct hash *hash = &spt->hash_table;
 
-    
     if (hash_insert(hash, &page->h_elem) != NULL)
-    {  
+    {
         return succ;
     }
-    
+
     succ = true;
     return succ;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
-    //추가
-    hash_delete(&spt->hash_table,&page->h_elem);
+    // 추가
+    hash_delete(&spt->hash_table, &page->h_elem);
     vm_dealloc_page(page);
     return true;
 }
@@ -143,10 +144,35 @@ vm_get_victim(void)
 {
     struct frame *victim = NULL;
     /* TODO: The policy for eviction is up to you. */
+
+    /* FIFO */
+    // lock_acquire(&vm_lock);
+    // struct list_elem *e = list_pop_front(&frame_table);
+    // lock_release(&vm_lock);
+    // victim = list_entry(e, struct frame, f_elem);
+
+    /* Clock Algorithm */
+
+    struct list_elem *e;
     lock_acquire(&vm_lock);
-    struct list_elem *e = list_pop_front(&frame_table);
+    for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
+    {
+        victim = list_entry(e, struct frame, f_elem);
+        if (victim->page == NULL)
+        {
+            lock_release(&vm_lock);
+            return victim;
+        }
+        if (pml4_is_accessed(thread_current()->pml4, victim->page->va))
+            pml4_set_accessed(thread_current()->pml4, victim->page->va, 0);
+
+        else
+        {
+            lock_release(&vm_lock);
+            return victim;
+        }
+    }
     lock_release(&vm_lock);
-    victim = list_entry(e, struct frame, f_elem);
     return victim;
 }
 
@@ -159,6 +185,7 @@ vm_evict_frame(void)
     /* TODO: swap out the victim and return the evicted frame. */
     if (swap_out(victim->page))
     {
+        // list_push_back(&frame_table, &victim->f_elem); // FIFO
         return victim;
     }
 
@@ -177,11 +204,15 @@ vm_get_frame(void)
     void *kva;
     struct page *page = NULL;
 
-    frame = (struct frame*)malloc(sizeof(struct frame));
     kva = palloc_get_page(PAL_USER);
     if (kva == NULL)
-        PANIC("todo"); // vm_evict_frame();
+    {
+        struct frame *victim = vm_evict_frame();
+        victim->page = NULL;
+        return victim;
+    }
 
+    frame = (struct frame *)malloc(sizeof(struct frame));
     frame->kva = kva;
     frame->page = page;
 
@@ -290,7 +321,7 @@ static bool vm_do_claim_page(struct page *page)
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
     struct thread *cur = thread_current();
-    pml4_set_page(cur->pml4,page->va,frame->kva,page->writable);
+    pml4_set_page(cur->pml4, page->va, frame->kva, page->writable);
     // if (pml4_get_page(cur->pml4, pg_round_down(page->va)) || !pml4_set_page(cur->pml4, pg_round_down(page->va), pg_round_down(frame->kva), page->writable))
     // {
     //     // printf("pml4 set false\n");
