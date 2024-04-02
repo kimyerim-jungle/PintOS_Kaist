@@ -12,6 +12,9 @@ struct file_page
     void *aux;
     void *va;
     struct file *file;
+    size_t read_bytes;
+    size_t zero_bytes;
+    off_t ofs; 
 };
 
 void vm_file_init(void);
