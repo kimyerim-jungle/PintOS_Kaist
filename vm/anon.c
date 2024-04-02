@@ -42,6 +42,7 @@ void vm_anon_init(void)
         struct slot *insert_disk = (struct slot *)malloc(sizeof(struct slot));
         insert_disk->used = 0;
         insert_disk->index = i;
+        insert_disk->page = NULL;
         if (insert_disk == NULL)
             printf("NULL\n");
         lock_acquire(&swap_lock);
@@ -143,7 +144,7 @@ anon_destroy(struct page *page)
 unsigned anon_page_hash(const struct hash_elem *p_, void *aux UNUSED)
 {
     const struct slot *p = hash_entry(p_, struct slot, swap_elem);
-    return hash_bytes(&p->page->va, sizeof p->page->va);
+    return hash_bytes(&p->index, sizeof p->index);
 }
 
 bool anon_page_less(const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED)
@@ -151,5 +152,5 @@ bool anon_page_less(const struct hash_elem *a_, const struct hash_elem *b_, void
     const struct slot *a = hash_entry(a_, struct slot, swap_elem);
     const struct slot *b = hash_entry(b_, struct slot, swap_elem);
 
-    return a->page->va < b->page->va;
+    return a->index < b->index;
 }
