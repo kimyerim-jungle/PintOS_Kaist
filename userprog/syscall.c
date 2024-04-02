@@ -237,7 +237,6 @@ void exit(int status)
 
 tid_t fork(const char *thread_name, struct intr_frame *f)
 {
-
     return process_fork(thread_name, f);
 }
 
@@ -357,9 +356,10 @@ int read(int fd, void *buffer, unsigned size)
     {
         return input_getc();
     }
-    else if (fd < 0 || fd == NULL || fd == 1)
+    else if (fd == NULL || fd == 1)
     {
-        exit(-1);
+        // exit(-1);
+        return -1;
     }
     else
     {
@@ -438,29 +438,34 @@ int process_add_file(struct file *f)
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
     // 파일의 시작점(offset)이 page-align되지 않았을 때
-	if(offset % PGSIZE != 0){
-		return NULL;
-	}
-	// 가상 유저 page 시작 주소가 page-align되어있지 않을 때
-	/* failure case 2: 해당 주소의 시작점이 page-align되어 있는지 & user 영역인지 & 주소값이 null인지 & length가 0이하인지*/
-	if(pg_round_down(addr)!= addr || is_kernel_vaddr(addr) || addr == NULL || (long long)length <= 0){
-		return NULL;
-	}
-	// 매핑하려는 페이지가 이미 존재하는 페이지와 겹칠 때(==SPT에 존재하는 페이지일 때)
-	
-	if(spt_find_page(&thread_current()->spt,addr)){
-		return NULL;
-	}
-	
-	// 콘솔 입출력과 연관된 파일 디스크립터 값(0: STDIN, 1:STDOUT)일 때
-	if(fd == 0 || fd == 1){
-		exit(-1);
-	}
-	// 찾는 파일이 디스크에 없는경우
-	struct file * target = find_file_descriptor(fd)->file;
-	if (target==NULL){
-		return NULL;
-	}
+    if (offset % PGSIZE != 0)
+    {
+        return NULL;
+    }
+    // 가상 유저 page 시작 주소가 page-align되어있지 않을 때
+    /* failure case 2: 해당 주소의 시작점이 page-align되어 있는지 & user 영역인지 & 주소값이 null인지 & length가 0이하인지*/
+    if (pg_round_down(addr) != addr || is_kernel_vaddr(addr) || addr == NULL || (long long)length <= 0)
+    {
+        return NULL;
+    }
+    // 매핑하려는 페이지가 이미 존재하는 페이지와 겹칠 때(==SPT에 존재하는 페이지일 때)
+
+    if (spt_find_page(&thread_current()->spt, addr))
+    {
+        return NULL;
+    }
+
+    // 콘솔 입출력과 연관된 파일 디스크립터 값(0: STDIN, 1:STDOUT)일 때
+    if (fd == 0 || fd == 1)
+    {
+        exit(-1);
+    }
+    // 찾는 파일이 디스크에 없는경우
+    struct file *target = find_file_descriptor(fd)->file;
+    if (target == NULL)
+    {
+        return NULL;
+    }
 
     return do_mmap(addr, length, writable, target, offset);
 }

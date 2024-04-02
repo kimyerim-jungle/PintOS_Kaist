@@ -822,8 +822,7 @@ install_page(void *upage, void *kpage, bool writable)
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-bool
-lazy_load_segment(struct page *page, void *aux)
+bool lazy_load_segment(struct page *page, void *aux)
 {
     /* TODO: Load the segment from the file */
     /* TODO: This called when the first page fault occurs on address VA. */
@@ -835,14 +834,15 @@ lazy_load_segment(struct page *page, void *aux)
 
     file_seek(nec->file, nec->ofs);
     /* Load this page. */
+
     if (file_read(nec->file, kpage, nec->read_byte) != (int)nec->read_byte)
     {
         palloc_free_page(kpage);
-        printf("file read fail\n");
+        printf("file read fail read byte %d\n", nec->read_byte);
         return false;
     }
     memset(kpage + nec->read_byte, 0, nec->zero_byte);
-    // file_seek(nec->file, nec->ofs);
+    file_seek(nec->file, nec->ofs);
     return true;
 }
 
@@ -883,8 +883,10 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         struct necessary_info *nec = (struct necessary_info *)malloc(sizeof(struct necessary_info));
         nec->file = file;
         nec->ofs = ofs;
-        nec->read_byte = read_bytes;
-        nec->zero_byte = zero_bytes;
+        // nec->read_byte = read_bytes;
+        // nec->zero_byte = zero_bytes;
+        nec->read_byte = page_read_bytes;
+        nec->zero_byte = page_zero_bytes;
         // nec->writable = writable;
         aux = nec;
 

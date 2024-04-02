@@ -40,8 +40,9 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 
     struct file_page *file_page = &page->file;
 
-    file_page->type = type;
-    file_page->va = kva;
+    // ile_page->type = type;
+    // file_page->va = kva;
+    file_page->aux = page->uninit.aux;
 
     return true;
 }
@@ -65,6 +66,15 @@ static void
 file_backed_destroy(struct page *page)
 {
     struct file_page *file_page UNUSED = &page->file;
+    struct necessary_info *nec = file_page->aux;
+    struct thread *curr = thread_current();
+
+    if (pml4_is_dirty(curr->pml4, page->va))
+    {
+        file_write_at(nec->file, page->va, nec->read_byte, nec->ofs);
+        pml4_set_dirty(curr->pml4, page->va, 0);
+    }
+    pml4_clear_page(curr->pml4, page->va);
 }
 
 /* Do the mmap */
@@ -83,24 +93,23 @@ do_mmap(void *addr, size_t length, int writable,
     size_t read_byte = file_length(file) < length ? file_length(file) : length;
     size_t zero_byte = PGSIZE - read_byte % PGSIZE;
 
-    ASSERT ((read_byte + zero_byte) % PGSIZE == 0);
-	ASSERT (pg_ofs (addr) == 0);
-	ASSERT (offset % PGSIZE == 0);
+    ASSERT((read_byte + zero_byte) % PGSIZE == 0);
+    ASSERT(pg_ofs(addr) == 0);
+    ASSERT(offset % PGSIZE == 0);
 
     while (read_byte > 0 || zero_byte > 0)
     {
         size_t page_read_bytes = read_byte < PGSIZE ? read_byte : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
         // printf("ofs %d\n", offset);
-        void *aux = NULL;
+
         struct necessary_info *nec = (struct necessary_info *)malloc(sizeof(struct necessary_info));
-        nec->file = file;
+        nec->file = open_file;
         nec->ofs = offset;
         nec->read_byte = page_read_bytes;
         nec->zero_byte = page_zero_bytes;
-        aux = nec;
 
-        if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable,lazy_load_segment , aux))
+        if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_segment, nec))
             return NULL;
 
         read_byte -= page_read_bytes;
@@ -108,7 +117,7 @@ do_mmap(void *addr, size_t length, int writable,
         addr += PGSIZE;
         offset += page_read_bytes;
     }
-    // printf("bbb\n");
+
     return ret;
 }
 
@@ -141,22 +150,21 @@ do_mmap(void *addr, size_t length, int writable,
 
 void do_munmap(void *addr)
 {
-    while(true)
+    while (true)
     {
-		struct thread *curr = thread_current();
-		struct page *find_page = spt_find_page(&curr->spt, addr);
-		
-		if (find_page == NULL) {
-    		return NULL;
-    	}
-    
-        struct necessary_info* nec = (struct necessary_info*)find_page->uninit.aux;
-        if(pml4_is_dirty(curr->pml4, find_page->va))
+        struct thread *curr = thread_current();
+        struct page *find_page = spt_find_page(&curr->spt, addr);
+
+        if (find_page == NULL)
         {
-            file_write_at(nec->file,addr,nec->read_byte,nec->ofs);
-            pml4_set_dirty(curr->pml4,find_page->va,0);
+            return NULL;
         }
-        pml4_clear_page(curr->pml4,find_page->va);
+
+        struct necessary_info *nec = (struct necessary_info *)find_page->uninit.aux;
+        find_page->file.aux = nec;
+        // printf("before %p\n", nec);
+        file_backed_destroy(find_page);
+
         addr += PGSIZE;
     }
 }
@@ -175,15 +183,13 @@ lazy_load_file(struct page *page, void *aux)
     file_seek(nec->file, nec->ofs);
     page->file.file = nec->file;
     /* Load this page. */
+    if (kpage == NULL)
+        printf("kva NULL\n");
     size_t read = file_read(nec->file, kpage, nec->read_byte);
-    // if (read != (int)nec->read_byte)
-    //{
-    //     printf("nec->read_byte %d  succ read %d\n", nec->read_byte, read);
-    //     palloc_free_page(kpage);
-    //     printf("file read fail\n");
-    //     return false;
-    // }
+    printf("read %d  want byte %d\n", read, (int)nec->read_byte);
+    if (read != (int)nec->read_byte)
+        return false;
     memset(kpage + nec->read_byte, 0, nec->zero_byte);
-    // file_seek(nec->file, nec->ofs);
+
     return true;
 }
