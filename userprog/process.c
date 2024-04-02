@@ -406,11 +406,12 @@ void process_exit(void)
     }
 
     file_close(t->running);
+    process_cleanup();
+    hash_destroy(&t->spt.hash_table,NULL);
 
     sema_up(&t->wait_sema);
     sema_down(&t->exit_sema);
 
-    process_cleanup();
 }
 
 /* Free the current process's resources. */

@@ -383,7 +383,6 @@ int write(int fd, const void *buffer, unsigned size)
     struct page *p = spt_find_page(&thread_current()->spt, buffer);
     if (p == NULL)
         exit(-1);
-
     if (fd == 1)
     {
         putbuf(buffer, size);
