@@ -334,7 +334,7 @@ void close(int fd)
         return -1;
     file_close(close_fd->file);
     list_remove(&close_fd->fd_elem);
-    // free(close_fd);
+    free(close_fd);
 }
 
 int filesize(int fd)
@@ -395,8 +395,8 @@ int write(int fd, const void *buffer, unsigned size)
     struct file_descriptor *write_fd = find_file_descriptor(fd);
     if (write_fd == NULL)
         return -1;
-    if (p && !p->writable)
-        exit(-1);
+    // if (p && !p->writable)
+    //     exit(-1);
     lock_acquire(&filesys_lock);
     off_t write_size = file_write(write_fd->file, buffer, size);
     lock_release(&filesys_lock);
