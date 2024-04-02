@@ -27,7 +27,15 @@
         "interrupt.h": "c",
         "inspect.h": "c",
         "vm.h": "c",
-        "mmu.h": "c"
+        "mmu.h": "c",
+        "*.tcc": "c",
+        "exception": "c",
+        "fstream": "c",
+        "iosfwd": "c",
+        "new": "c",
+        "ostream": "c",
+        "sstream": "c",
+        "streambuf": "c"
     },
     "C_Cpp.errorSquiggles": "disabled"
 }
