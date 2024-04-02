@@ -36,20 +36,16 @@ void vm_anon_init(void)
     swap_disk = disk_get(1, 1); // swap
 
     disk_sector_t swap_size = disk_size(swap_disk) / 8;
-    printf("init start\n");
     for (disk_sector_t i = 0; i < swap_size; i++)
     {
         struct slot *insert_disk = (struct slot *)malloc(sizeof(struct slot));
         insert_disk->used = 0;
         insert_disk->index = i;
         insert_disk->page = NULL;
-        if (insert_disk == NULL)
-            printf("NULL\n");
         lock_acquire(&swap_lock);
         hash_insert(&swap_table, &insert_disk->swap_elem);
         lock_release(&swap_lock);
     }
-    printf("init done\n");
 }
 
 /* Initialize the file mapping */
@@ -74,7 +70,6 @@ anon_swap_in(struct page *page, void *kva)
     disk_sector_t page_slot_index = anon_page->slot_idx;
 
     struct hash_iterator i;
-    printf("swap in start\n");
     hash_first(&i, &swap_table);
     lock_acquire(&swap_lock);
     while (hash_next(&i))
@@ -84,15 +79,14 @@ anon_swap_in(struct page *page, void *kva)
         {
             for (int i = 0; i < 8; i++)
                 disk_read(swap_disk, page_slot_index * 8 + i, kva + DISK_SECTOR_SIZE * i);
+
+            slot->page = NULL;
+            slot->used = 0;
+            anon_page->slot_idx = -1;
+            lock_release(&swap_lock);
+            return true;
         }
-        slot->page = NULL;
-        slot->used = 0;
-        anon_page->slot_idx = -1;
-        lock_release(&swap_lock);
-        printf("swap in succ\n");
-        return true;
     }
-    printf("swap in fail\n");
     lock_release(&swap_lock);
     return false;
 }
@@ -106,7 +100,6 @@ anon_swap_out(struct page *page)
     struct anon_page *anon_page = &page->anon;
     struct slot *slot;
     struct hash_iterator i;
-    printf("swap out start\n");
     hash_first(&i, &swap_table);
     lock_acquire(&swap_lock);
     while (hash_next(&i))
@@ -126,7 +119,6 @@ anon_swap_out(struct page *page)
             page->frame = NULL;
             pml4_clear_page(thread_current()->pml4, page->va);
             lock_release(&swap_lock);
-            printf("swap out succ\n");
             return true;
         }
     }
