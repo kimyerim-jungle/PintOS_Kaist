@@ -99,17 +99,15 @@ spt_find_page(struct supplemental_page_table *spt, void *va)
     /* TODO: Fill this function. */
     struct hash *hash = &spt->hash_table;
 
-    page = (struct page *)palloc_get_page(0);
+    page = (struct page *)malloc(sizeof(struct page));
     page->va = pg_round_down(va);
     struct hash_elem *e = hash_find(hash, &page->h_elem);
+    free(page);
     if (e == NULL)
     {
-        palloc_free_page(page);
         return NULL;
     }
-    palloc_free_page(page);
     page = hash_entry(e, struct page, h_elem);
-
     return page;
 }
 
@@ -121,22 +119,21 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
     /* TODO: Fill this function. */
     struct hash *hash = &spt->hash_table;
 
-    lock_acquire(&vm_lock);
+    
     if (hash_insert(hash, &page->h_elem) != NULL)
-    {
-        lock_release(&vm_lock);
+    {  
         return succ;
     }
-    lock_release(&vm_lock);
+    
     succ = true;
     return succ;
 }
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
-    lock_acquire(&vm_lock);
+    //추가
+    hash_delete(&spt->hash_table,&page->h_elem);
     vm_dealloc_page(page);
-    lock_release(&vm_lock);
     return true;
 }
 
@@ -175,13 +172,12 @@ vm_evict_frame(void)
 static struct frame *
 vm_get_frame(void)
 {
-    struct frame *frame; // 정적 선언
+    struct frame *frame = NULL; // 정적 선언
     /* TODO: Fill this function. */
     void *kva;
     struct page *page = NULL;
 
-    // frame = (struct frame *)malloc(sizeof(struct frame));
-    frame = palloc_get_page(0);
+    frame = (struct frame*)malloc(sizeof(struct frame));
     kva = palloc_get_page(PAL_USER);
     if (kva == NULL)
         PANIC("todo"); // vm_evict_frame();
@@ -202,7 +198,7 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr)
 {
-    vm_alloc_page(VM_ANON | VM_MARKER_0, addr, 1);
+    vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -285,20 +281,21 @@ static bool vm_do_claim_page(struct page *page)
     struct frame *frame = vm_get_frame();
 
     /* Set links */
-    if (page->frame != NULL)
-    {
-        return false;
-    }
+    // if (page->frame != NULL)
+    // {
+    //     return false;
+    // }
     frame->page = page;
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
     struct thread *cur = thread_current();
-    if (pml4_get_page(cur->pml4, pg_round_down(page->va)) || !pml4_set_page(cur->pml4, pg_round_down(page->va), pg_round_down(frame->kva), page->writable))
-    {
-        // printf("pml4 set false\n");
-        return false;
-    }
+    pml4_set_page(cur->pml4,page->va,frame->kva,page->writable);
+    // if (pml4_get_page(cur->pml4, pg_round_down(page->va)) || !pml4_set_page(cur->pml4, pg_round_down(page->va), pg_round_down(frame->kva), page->writable))
+    // {
+    //     // printf("pml4 set false\n");
+    //     return false;
+    // }
 
     return swap_in(page, frame->kva);
 }
