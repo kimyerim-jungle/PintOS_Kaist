@@ -44,7 +44,6 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
     // ile_page->type = type;
     // file_page->va = kva;
     file_page->aux = page->uninit.aux;
-    file_page->file = ((struct necessary_info *)file_page->aux)->file;
 
     return true;
 }
@@ -54,9 +53,22 @@ static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
     struct file_page *file_page UNUSED = &page->file;
-
+    if(page==NULL){
+		return false;
+	}
+    struct necessary_info *nec = file_page->aux;
+    struct file* file = nec->file;
+    off_t ofs = nec->ofs;
+    size_t read_byte = nec->read_byte;
+    size_t zero_byte = PGSIZE-read_byte;
     lock_acquire(&file_lock);
-    file_read(file_page->file, kva, PGSIZE);
+    file_seek(file,ofs);
+    if(file_read(file,kva,read_byte) != (int)read_byte)
+    {
+        lock_release(&file_lock);
+        return false;
+    }
+    memset(kva+read_byte,0,zero_byte);
     lock_release(&file_lock);
     return true;
 }
@@ -66,22 +78,19 @@ static bool
 file_backed_swap_out(struct page *page)
 {
     struct file_page *file_page UNUSED = &page->file;
-
+    if(page==NULL){
+		return false;
+	}
+    struct necessary_info *nec = file_page->aux;
+    struct file* file = nec->file;
     lock_acquire(&file_lock);
-    if (!pml4_is_dirty(thread_current()->pml4, page->va))
-    {
-        pml4_clear_page(thread_current()->pml4, page->va);
-        lock_release(&file_lock);
-        return true;
-    }
-    // struct file *re = file_reopen(file_page->file);
-
-    file_write(file_page->file, page->va, PGSIZE);
-
-    pml4_set_dirty(thread_current()->pml4, page->va, 0);
-    pml4_clear_page(thread_current()->pml4, page->va);
+    if(pml4_is_dirty(thread_current()->pml4,page->va)){
+		file_write_at(file,page->va, nec->read_byte, nec->ofs);
+		pml4_set_dirty(thread_current()->pml4, page->va, false);
+	}
+	pml4_clear_page(thread_current()->pml4, page->va);
     lock_release(&file_lock);
-    return true;
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
