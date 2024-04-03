@@ -30,6 +30,7 @@ struct file
 /* The initializer of file vm */
 void vm_file_init(void)
 {
+    lock_init(&file_lock);
 }
 
 /* Initialize the file backed page */
@@ -43,6 +44,7 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
     // ile_page->type = type;
     // file_page->va = kva;
     file_page->aux = page->uninit.aux;
+    file_page->file = ((struct necessary_info *)file_page->aux)->file;
 
     return true;
 }
@@ -52,6 +54,11 @@ static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
     struct file_page *file_page UNUSED = &page->file;
+
+    lock_acquire(&file_lock);
+    file_read(file_page->file, kva, PGSIZE);
+    lock_release(&file_lock);
+    return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
@@ -59,6 +66,22 @@ static bool
 file_backed_swap_out(struct page *page)
 {
     struct file_page *file_page UNUSED = &page->file;
+
+    lock_acquire(&file_lock);
+    if (!pml4_is_dirty(thread_current()->pml4, page->va))
+    {
+        pml4_clear_page(thread_current()->pml4, page->va);
+        lock_release(&file_lock);
+        return true;
+    }
+    // struct file *re = file_reopen(file_page->file);
+
+    file_write(file_page->file, page->va, PGSIZE);
+
+    pml4_set_dirty(thread_current()->pml4, page->va, 0);
+    pml4_clear_page(thread_current()->pml4, page->va);
+    lock_release(&file_lock);
+    return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
