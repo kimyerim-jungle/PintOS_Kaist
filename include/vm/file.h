@@ -2,6 +2,7 @@
 #define VM_FILE_H
 #include "filesys/file.h"
 #include "vm/vm.h"
+#include "threads/synch.h"
 
 struct page;
 enum vm_type;
@@ -13,6 +14,8 @@ struct file_page
     void *va;
     struct file *file;
 };
+
+struct lock file_lock;
 
 void vm_file_init(void);
 bool file_backed_initializer(struct page *page, enum vm_type type, void *kva);
