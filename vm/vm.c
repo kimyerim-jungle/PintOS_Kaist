@@ -146,14 +146,14 @@ vm_get_victim(void)
     /* TODO: The policy for eviction is up to you. */
 
     /* FIFO */
-    // lock_acquire(&vm_lock);
-    // struct list_elem *e = list_pop_front(&frame_table);
-    // lock_release(&vm_lock);
-    // victim = list_entry(e, struct frame, f_elem);
+    lock_acquire(&vm_lock);
+    struct list_elem *e = list_pop_front(&frame_table);
+    lock_release(&vm_lock);
+    victim = list_entry(e, struct frame, f_elem);
 
     /* Clock Algorithm */
 
-    struct list_elem *e;
+    /*struct list_elem *e;
     lock_acquire(&vm_lock);
     for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
     {
@@ -172,7 +172,7 @@ vm_get_victim(void)
             return victim;
         }
     }
-    lock_release(&vm_lock);
+    lock_release(&vm_lock);*/
     return victim;
 }
 
@@ -185,7 +185,7 @@ vm_evict_frame(void)
     /* TODO: swap out the victim and return the evicted frame. */
     if (swap_out(victim->page))
     {
-        // list_push_back(&frame_table, &victim->f_elem); // FIFO
+        list_push_back(&frame_table, &victim->f_elem); // FIFO
         return victim;
     }
 
