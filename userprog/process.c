@@ -407,11 +407,10 @@ void process_exit(void)
 
     file_close(t->running);
     process_cleanup();
-    hash_destroy(&t->spt.hash_table,NULL);
+    hash_destroy(&t->spt.hash_table, NULL);
 
     sema_up(&t->wait_sema);
     sema_down(&t->exit_sema);
-
 }
 
 /* Free the current process's resources. */
@@ -843,7 +842,7 @@ bool lazy_load_segment(struct page *page, void *aux)
         return false;
     }
     memset(kpage + nec->read_byte, 0, nec->zero_byte);
-    file_seek(nec->file, nec->ofs);
+    // file_seek(nec->file, nec->ofs);
     return true;
 }
 
@@ -884,11 +883,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         struct necessary_info *nec = (struct necessary_info *)malloc(sizeof(struct necessary_info));
         nec->file = file;
         nec->ofs = ofs;
-        // nec->read_byte = read_bytes;
-        // nec->zero_byte = zero_bytes;
         nec->read_byte = page_read_bytes;
         nec->zero_byte = page_zero_bytes;
-        // nec->writable = writable;
         aux = nec;
 
         if (!vm_alloc_page_with_initializer(VM_ANON, upage,

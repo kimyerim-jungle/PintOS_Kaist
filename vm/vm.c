@@ -65,7 +65,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
     ASSERT(VM_TYPE(type) != VM_UNINIT)
 
     struct supplemental_page_table *spt = &thread_current()->spt;
-    // printf("thcu tid %d\n", thread_current()->tid);
+
     /* Check wheter the upage is already occupied or not. */
     if (spt_find_page(spt, upage) == NULL)
     {
@@ -86,8 +86,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
         new_page->writable = writable;
         /* TODO: Insert the page into the spt. */
         return spt_insert_page(spt, new_page);
-
-        // return true;
     }
 err:
     return false;
@@ -132,7 +130,6 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
-    // 추가
     hash_delete(&spt->hash_table, &page->h_elem);
     vm_dealloc_page(page);
     return true;
@@ -146,14 +143,14 @@ vm_get_victim(void)
     /* TODO: The policy for eviction is up to you. */
 
     /* FIFO */
-    lock_acquire(&vm_lock);
-    struct list_elem *e = list_pop_front(&frame_table);
-    lock_release(&vm_lock);
-    victim = list_entry(e, struct frame, f_elem);
+    // lock_acquire(&vm_lock);
+    // struct list_elem *e = list_pop_front(&frame_table);
+    // lock_release(&vm_lock);
+    // victim = list_entry(e, struct frame, f_elem);
 
     /* Clock Algorithm */
 
-    /*struct list_elem *e;
+    struct list_elem *e;
     lock_acquire(&vm_lock);
     for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
     {
@@ -172,7 +169,7 @@ vm_get_victim(void)
             return victim;
         }
     }
-    lock_release(&vm_lock);*/
+    lock_release(&vm_lock);
     return victim;
 }
 
@@ -185,7 +182,7 @@ vm_evict_frame(void)
     /* TODO: swap out the victim and return the evicted frame. */
     if (swap_out(victim->page))
     {
-        list_push_back(&frame_table, &victim->f_elem); // FIFO
+        // list_push_back(&frame_table, &victim->f_elem); // FIFO
         return victim;
     }
 
@@ -199,7 +196,7 @@ vm_evict_frame(void)
 static struct frame *
 vm_get_frame(void)
 {
-    struct frame *frame = NULL; // 정적 선언
+    struct frame *frame = NULL;
     /* TODO: Fill this function. */
     void *kva;
     struct page *page = NULL;
@@ -301,7 +298,6 @@ bool vm_claim_page(void *va UNUSED)
     page = spt_find_page(spt, va);
     if (page == NULL)
         return false;
-    // page->va = va;
 
     return vm_do_claim_page(page);
 }
@@ -312,21 +308,12 @@ static bool vm_do_claim_page(struct page *page)
     struct frame *frame = vm_get_frame();
 
     /* Set links */
-    // if (page->frame != NULL)
-    // {
-    //     return false;
-    // }
     frame->page = page;
     page->frame = frame;
 
     /* TODO: Insert page table entry to map page's VA to frame's PA. */
     struct thread *cur = thread_current();
     pml4_set_page(cur->pml4, page->va, frame->kva, page->writable);
-    // if (pml4_get_page(cur->pml4, pg_round_down(page->va)) || !pml4_set_page(cur->pml4, pg_round_down(page->va), pg_round_down(frame->kva), page->writable))
-    // {
-    //     // printf("pml4 set false\n");
-    //     return false;
-    // }
 
     return swap_in(page, frame->kva);
 }
@@ -356,7 +343,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 
         if (p->operations->type == VM_UNINIT)
         {
-            // uninit_new(child, p->va, NULL, p->operations->type, NULL, NULL);
             if (!vm_alloc_page_with_initializer(type, p->va, p->writable, p->uninit.init, p->uninit.aux))
                 return false;
         }
@@ -378,8 +364,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 void hash_elem_destroy(struct hash_elem *e, void *aux UNUSED)
 {
     struct page *p = hash_entry(e, struct page, h_elem);
-    // destroy(p);
-    // palloc_free_page(p);
     vm_dealloc_page(p);
 }
 /* Free the resource hold by the supplemental page table */
@@ -390,7 +374,6 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
     struct hash *hash = &spt->hash_table;
 
     hash_clear(hash, hash_elem_destroy);
-    // hash_destroy(hash, hash_elem_destroy);
 }
 
 unsigned page_hash(const struct hash_elem *p_, void *aux UNUSED)

@@ -227,11 +227,7 @@ void halt(void)
 // 현재 유저 프로그램 종료 (status를 반환함)
 void exit(int status)
 {
-    // char* p_name = thread_current ()->name;
-    // char* p = "\0";
     thread_current()->exit_status = status;
-    // strtok_r(p_name," ",&p);
-    // printf ("%s: exit(%d)\n", p_name, status);
     thread_exit();
 }
 

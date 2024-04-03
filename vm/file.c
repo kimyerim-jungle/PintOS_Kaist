@@ -41,8 +41,6 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 
     struct file_page *file_page = &page->file;
 
-    // ile_page->type = type;
-    // file_page->va = kva;
     file_page->aux = page->uninit.aux;
 
     return true;
@@ -53,23 +51,15 @@ static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
     struct file_page *file_page UNUSED = &page->file;
-    if(page==NULL){
-		return false;
-	}
-    struct necessary_info *nec = file_page->aux;
-    struct file* file = nec->file;
-    off_t ofs = nec->ofs;
-    size_t read_byte = nec->read_byte;
-    size_t zero_byte = PGSIZE-read_byte;
+    struct necessary_info *nec = (struct necessary_info *)file_page->aux;
+
+    file_seek(nec->file, nec->ofs);
     lock_acquire(&file_lock);
-    file_seek(file,ofs);
-    if(file_read(file,kva,read_byte) != (int)read_byte)
-    {
-        lock_release(&file_lock);
-        return false;
-    }
-    memset(kva+read_byte,0,zero_byte);
+    file_read(nec->file, kva, nec->read_byte);
     lock_release(&file_lock);
+
+    memset(kva + nec->read_byte, 0, nec->zero_byte);
+
     return true;
 }
 
@@ -78,19 +68,21 @@ static bool
 file_backed_swap_out(struct page *page)
 {
     struct file_page *file_page UNUSED = &page->file;
-    if(page==NULL){
-		return false;
-	}
+    if (page == NULL)
+    {
+        return false;
+    }
     struct necessary_info *nec = file_page->aux;
-    struct file* file = nec->file;
+    struct file *file = nec->file;
     lock_acquire(&file_lock);
-    if(pml4_is_dirty(thread_current()->pml4,page->va)){
-		file_write_at(file,page->va, nec->read_byte, nec->ofs);
-		pml4_set_dirty(thread_current()->pml4, page->va, false);
-	}
-	pml4_clear_page(thread_current()->pml4, page->va);
+    if (pml4_is_dirty(thread_current()->pml4, page->va))
+    {
+        file_write_at(file, page->va, nec->read_byte, nec->ofs);
+        pml4_set_dirty(thread_current()->pml4, page->va, false);
+    }
+    pml4_clear_page(thread_current()->pml4, page->va);
     lock_release(&file_lock);
-	return true;
+    return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -115,7 +107,6 @@ do_mmap(void *addr, size_t length, int writable,
         struct file *file, off_t offset)
 {
     // offset ~ length
-
     void *ret = addr;
     struct file *open_file = file_reopen(file);
 
@@ -133,7 +124,6 @@ do_mmap(void *addr, size_t length, int writable,
     {
         size_t page_read_bytes = read_byte < PGSIZE ? read_byte : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
-        // printf("ofs %d\n", offset);
 
         struct necessary_info *nec = (struct necessary_info *)malloc(sizeof(struct necessary_info));
         nec->file = open_file;
@@ -154,32 +144,6 @@ do_mmap(void *addr, size_t length, int writable,
 }
 
 /* Do the munmap */
-// void do_munmap(void *addr)
-// {
-//     // 연결 끊기
-
-//     struct page *page = spt_find_page(&thread_current()->spt, addr);
-//     if (page == NULL)
-//         printf("p NULL\n");
-//     // struct frame *frame = page->frame;
-
-//     page->frame = NULL;
-//     // palloc_free_page(frame->kva);
-//     // palloc_free_page(frame);
-
-//     struct file *file = file_reopen(page->file.file);
-
-//     // 더티 페이지 디스크에 작성해주기, 작성 후 더티 비트 0으로 변경
-//     if (pml4_is_dirty(&thread_current()->pml4, addr))
-//     {
-//         file_write(file, addr, file->pos);
-//         pml4_set_dirty(&thread_current()->pml4, addr, 0);
-//     }
-
-//     // 페이지테이블 보조 테이블에서 삭제
-//     spt_remove_page(&thread_current()->spt, page);
-// }
-
 void do_munmap(void *addr)
 {
     while (true)
@@ -194,34 +158,8 @@ void do_munmap(void *addr)
 
         struct necessary_info *nec = (struct necessary_info *)find_page->uninit.aux;
         find_page->file.aux = nec;
-        // printf("before %p\n", nec);
         file_backed_destroy(find_page);
 
         addr += PGSIZE;
     }
-}
-
-static bool
-lazy_load_file(struct page *page, void *aux)
-{
-    /* TODO: Load the segment from the file */
-    /* TODO: This called when the first page fault occurs on address VA. */
-    /* TODO: VA is available when calling this function. */
-
-    struct necessary_info *nec = (struct necessary_info *)aux;
-
-    void *kpage = page->frame->kva;
-
-    file_seek(nec->file, nec->ofs);
-    page->file.file = nec->file;
-    /* Load this page. */
-    if (kpage == NULL)
-        printf("kva NULL\n");
-    size_t read = file_read(nec->file, kpage, nec->read_byte);
-    printf("read %d  want byte %d\n", read, (int)nec->read_byte);
-    if (read != (int)nec->read_byte)
-        return false;
-    memset(kpage + nec->read_byte, 0, nec->zero_byte);
-
-    return true;
 }

@@ -25,13 +25,6 @@ enum vm_type
     VM_MARKER_END = (1 << 31),
 };
 
-enum page_type
-{
-    IS_FRAME = 0,
-    IS_DISK = 1,
-    IS_SWAP = 2,
-};
-
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
@@ -58,11 +51,7 @@ struct page
     /* Your implementation */
     struct hash_elem h_elem;
 
-    int maker;
-    enum page_type where; // 데이터가 존재하는 곳
-    bool is_active;
     bool writable;
-    int mapped_page_count;
 
     /* Per-type data are binded into the union.
      * Each function automatically detects the current union */
@@ -118,10 +107,7 @@ struct lock vm_lock;
  * All designs up to you for this. */
 struct supplemental_page_table
 {
-    // hash key : va elem : page <- but hash find hash, hashelem
-
     struct hash hash_table;
-    // struct hash frame_hash; // 프레임에 hash elem 추가
 };
 
 #include "threads/thread.h"

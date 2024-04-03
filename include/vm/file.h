@@ -12,10 +12,9 @@ struct file_page
     enum vm_type type;
     void *aux;
     void *va;
-    struct file *file;
     size_t read_bytes;
     size_t zero_bytes;
-    off_t ofs; 
+    off_t ofs;
 };
 
 struct lock file_lock;
